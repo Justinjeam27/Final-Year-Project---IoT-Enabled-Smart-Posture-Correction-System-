@@ -1,5 +1,5 @@
 /*
- * PROJECT: IoT-Enabled Smart Posture Correction System with Real-Time Activity Monitoring and Analysis
+ * PROJECT: IoT-Enabled Smart Posture Correction System with Real-Time Activity Monitoring and Analysis - Physical Prototype
  * AUTHOR: Justin Jeam Crisostomo
  * HARDWARE: Seeed Studio XIAO ESP32-S3, MPU-6050, Active Buzzer
  * DESCRIPTION: Upgraded from PDE3116. Native Wi-Fi, ThingSpeak HTTP client, and Blynk App Integration.
@@ -7,18 +7,18 @@
  */
 
 // ================================================================
-// 1. BLYNK CONFIGURATION (MUST BE AT THE VERY TOP)
+// 1. BLYNK CONFIGURATION
 // ================================================================
-#define BLYNK_TEMPLATE_ID "TMPL_Your_ID_Here"
+#define BLYNK_TEMPLATE_ID "TMPL6cws0IBHu"
 #define BLYNK_TEMPLATE_NAME "Smart Posture Corrector"
-#define BLYNK_AUTH_TOKEN "Your_Blynk_Auth_Token_Here"
+#define BLYNK_AUTH_TOKEN "z78wYM7OS53a_aGUs-QrEOcB0_hh3_Cj"
 
 // ================================================================
 // 2. LIBRARIES
 // ================================================================
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <BlynkSimpleEsp32.h> // Blynk library for ESP32
+#include <BlynkSimpleEsp32.h>
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -26,148 +26,163 @@
 // ================================================================
 // 3. HARDWARE CONFIGURATION
 // ================================================================
-// On the XIAO ESP32-S3, Pin D3 corresponds to GPIO 4
-const int BUZZER_PIN = 4; 
-Adafruit_MPU6050 mpu;   
+const int BUZZER_PIN = 4;  // GPIO 4 (D3 on XIAO)
+Adafruit_MPU6050 mpuNeck;  // Address 0x68
+Adafruit_MPU6050 mpuSpine; // Address 0x69 (AD0 to VCC)
 
 // ================================================================
-// 4. WI-FI & CLOUD CREDENTIALS
+// 4. PHYSICAL WI-FI CREDENTIALS
 // ================================================================
-char ssid[] = "Type_Wifi_Name_here";      
-char pass[] = "Type_Wifi_Password_here"; 
+char ssid[] = "YOUR_WIFI_NAME";      // <--- Update this to your real WiFi Name
+char pass[] = "YOUR_WIFI_PASSWORD";  // <--- Update this to your real WiFi Password
 
-// ThingSpeak Settings
-String apiKey = "Type_your_API_Key"; 
+String apiKey = "PCGMNVIU22O69KF5"; 
 String serverName = "http://api.thingspeak.com/update"; 
 
 // ================================================================
 // 5. POSTURE LOGIC VARIABLES
 // ================================================================
-const float SLOUCH_THRESHOLD = 25.0; // Angle (degrees) that triggers the alarm
-float baselineAngle = 0;             // Stores the user's "perfect posture" angle
+const float SLOUCH_THRESHOLD = 25.0; 
+float baselineNeck = 0;
+float baselineSpine = 0;
+int systemActive = 1; // 1 = ON, 0 = PAUSED
 
 // ================================================================
-// 6. TIMER VARIABLES (Non-blocking delay)
+// 6. TIMER VARIABLES
 // ================================================================
 unsigned long lastThingSpeakTime = 0;    
-const unsigned long thingspeakInterval = 20000; // 20 seconds for ThingSpeak
+const unsigned long thingspeakInterval = 20000; 
 
 unsigned long lastBlynkTime = 0;
-const unsigned long blynkInterval = 1000;       // 1 second refresh for Blynk app
+const unsigned long blynkInterval = 1000; 
+
+// ================================================================
+// 7. BLYNK INTERRUPTS
+// ================================================================
+BLYNK_CONNECTED() {
+  Blynk.syncVirtual(V2); 
+}
+
+BLYNK_WRITE(V2) {
+  systemActive = param.asInt(); 
+  if (systemActive == 0) {
+    digitalWrite(BUZZER_PIN, LOW); 
+    Serial.println(">>> SYSTEM PAUSED VIA MOBILE APP <<<");
+  } else {
+    Serial.println(">>> SYSTEM RESUMED VIA MOBILE APP <<<");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
+  delay(1000); 
   
-  // Initialize Output Pins
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
 
-  Serial.println("--- SMART POSTURE CORRECTOR STARTING ---");
+  Serial.println("--- PHYSICAL DUAL-IMU SYSTEM STARTING ---");
 
-  // Initialize the MPU-6050 Sensor
-  if (!mpu.begin()) {
-    Serial.println("Failed to find MPU6050 chip");
-    while (1) { 
-      digitalWrite(BUZZER_PIN, HIGH); delay(100); 
-      digitalWrite(BUZZER_PIN, LOW); delay(100); 
-    }
+  // SDA = GPIO 5 (D4), SCL = GPIO 6 (D5)
+  Wire.begin(5, 6); 
+
+  if (!mpuNeck.begin(0x68)) {
+    Serial.println("Neck Found Error!");
+    while (1) { yield(); }
   }
-  Serial.println("MPU6050 Found!");
+  if (!mpuSpine.begin(0x69)) {
+    Serial.println("Spine Found Error!");
+    while (1) { yield(); }
+  }
   
-  // Set Sensor Sensitivity
-  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  mpuNeck.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpuNeck.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  mpuSpine.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpuSpine.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
-  // Connect to Wi-Fi and Blynk simultaneously
-  Serial.println("Connecting to Wi-Fi and Blynk Cloud...");
+  // Connection handshake
+  Serial.print("Connecting to Blynk Cloud...");
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-
-  // Set the baseline posture
+  Serial.println("\nBlynk Connected!");
+  
   calibratePosture();  
 }
 
 void loop() {
-  // Keep the Blynk connection alive
   Blynk.run(); 
 
-  // 1. READ SENSOR DATA
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
+  sensors_event_t nA, nG, nTemp;
+  sensors_event_t sA, sG, sTemp;
+  mpuNeck.getEvent(&nA, &nG, &nTemp);
+  mpuSpine.getEvent(&sA, &sG, &sTemp);
 
-  // 2. CALCULATE POSTURE ANGLE
-  // Converts X and Z acceleration into an angle measuring neck/spine tilt
-  float currentAngle = atan2(a.acceleration.x, a.acceleration.z) * 57.29578; 
-  float slouchAngle = abs(currentAngle - baselineAngle);
+  // Calculation for Physical Orientation
+  float currentNeckAngle = atan2(nA.acceleration.x, nA.acceleration.z) * 57.29578; 
+  float currentSpineAngle = atan2(sA.acceleration.x, sA.acceleration.z) * 57.29578;
 
-  // 3. HAPTIC FEEDBACK LOGIC
-  if (slouchAngle > SLOUCH_THRESHOLD) {
-    digitalWrite(BUZZER_PIN, HIGH); // Bad Posture: Buzz ON
-  } else {
-    digitalWrite(BUZZER_PIN, LOW);  // Good Posture: Buzz OFF
-  }
+  // Fixed Differential Analysis with abs()
+  float neckSlouch = currentNeckAngle - baselineNeck;
+  float spineSlouch = currentSpineAngle - baselineSpine;
+  float netSlouch = abs(neckSlouch - spineSlouch); 
 
-  // 4. BLYNK APP UPLOAD (Every 1 second for real-time feel)
-  if (millis() - lastBlynkTime > blynkInterval) {
-    // Send live angle to Virtual Pin V0
-    Blynk.virtualWrite(V0, slouchAngle); 
-    
-    // Send Text Status to Virtual Pin V1
-    if (slouchAngle > SLOUCH_THRESHOLD) {
-      Blynk.virtualWrite(V1, "SLOUCHING DETECTED!");
+  if (systemActive == 1) {
+    Serial.print("Neck:"); Serial.print(neckSlouch);
+    Serial.print(", Spine:"); Serial.print(spineSlouch);
+    Serial.print(", Net_Slouch:"); Serial.println(netSlouch);
+
+    // Haptic Logic
+    if (netSlouch > SLOUCH_THRESHOLD) {
+      digitalWrite(BUZZER_PIN, HIGH);
     } else {
-      Blynk.virtualWrite(V1, "GOOD POSTURE");
+      digitalWrite(BUZZER_PIN, LOW);
     }
-    lastBlynkTime = millis();
-  }
 
-  // 5. THINGSPEAK CLOUD UPLOAD (Every 20 seconds)
-  if (millis() - lastThingSpeakTime > thingspeakInterval) {
-    sendToThingSpeak(slouchAngle);
-    lastThingSpeakTime = millis(); 
+    // Blynk Upload
+    if (millis() - lastBlynkTime > blynkInterval) {
+      Blynk.virtualWrite(V0, netSlouch); 
+      Blynk.virtualWrite(V1, (netSlouch > SLOUCH_THRESHOLD) ? "SLOUCHING DETECTED!" : "GOOD POSTURE");
+      lastBlynkTime = millis();
+    }
+
+    // ThingSpeak Upload
+    if (millis() - lastThingSpeakTime > thingspeakInterval) {
+      sendToThingSpeak(neckSlouch, spineSlouch, netSlouch);
+      lastThingSpeakTime = millis(); 
+    }
+  } else {
+    if (millis() - lastBlynkTime > blynkInterval) {
+      Blynk.virtualWrite(V0, 0); 
+      Blynk.virtualWrite(V1, "SYSTEM PAUSED"); 
+      lastBlynkTime = millis();
+    }
   }
-  
-  delay(50); // Small stability delay
+  delay(100); 
 }
 
-// ================================================================
-// HELPER FUNCTIONS
-// ================================================================
-
 void calibratePosture() {
-  Serial.println(">>> CALIBRATION: Stand Straight for 3 Seconds... <<<");
+  Serial.println(">>> CALIBRATION: Stand Straight... <<<");
   digitalWrite(BUZZER_PIN, HIGH); delay(100); digitalWrite(BUZZER_PIN, LOW);
   delay(3000); 
   
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  baselineAngle = atan2(a.acceleration.x, a.acceleration.z) * 57.29578;
+  sensors_event_t nA, nG, nT;
+  sensors_event_t sA, sG, sT;
+  mpuNeck.getEvent(&nA, &nG, &nT);
+  mpuSpine.getEvent(&sA, &sG, &sT);
   
-  Serial.print("Baseline set to: "); Serial.println(baselineAngle);
+  baselineNeck = atan2(nA.acceleration.x, nA.acceleration.z) * 57.29578;
+  baselineSpine = atan2(sA.acceleration.x, sA.acceleration.z) * 57.29578;
+  
   digitalWrite(BUZZER_PIN, HIGH); delay(600); digitalWrite(BUZZER_PIN, LOW);
 }
 
-void sendToThingSpeak(float angle) {
-  // Check if connected to Wi-Fi before sending
+void sendToThingSpeak(float neck, float spine, float net) {
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
-    
-    // Construct the full URL with your API key and data
-    String serverPath = serverName + "?api_key=" + apiKey + "&field1=" + String(angle);
-    
-    // Begin HTTP connection and send GET request
+    String serverPath = serverName + "?api_key=" + apiKey 
+                      + "&field1=" + String(neck) 
+                      + "&field2=" + String(spine) 
+                      + "&field3=" + String(net);
     http.begin(serverPath.c_str());
-    int httpResponseCode = http.GET();
-    
-    if (httpResponseCode > 0) {
-      Serial.print("ThingSpeak Upload Success. HTTP Response code: ");
-      Serial.println(httpResponseCode);
-    } else {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-    }
-    // Free resources
+    http.GET();
     http.end();
-  } else {
-    Serial.println("Wi-Fi Disconnected. Cannot send to ThingSpeak.");
   }
 }
