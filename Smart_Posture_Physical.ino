@@ -117,7 +117,7 @@ void loop() {
 
   // Calculation for Physical Orientation
   float currentNeckAngle = atan2(nA.acceleration.x, nA.acceleration.z) * 57.29578; 
-  float currentSpineAngle = atan2(sA.acceleration.x, sA.acceleration.z) * 57.29578;
+  float currentSpineAngle = atan2(sA.acceleration.y, sA.acceleration.z) * 57.29578;
 
   // Fixed Differential Analysis with abs()
   float neckSlouch = currentNeckAngle - baselineNeck;
@@ -169,7 +169,7 @@ void calibratePosture() {
   mpuSpine.getEvent(&sA, &sG, &sT);
   
   baselineNeck = atan2(nA.acceleration.x, nA.acceleration.z) * 57.29578;
-  baselineSpine = atan2(sA.acceleration.x, sA.acceleration.z) * 57.29578;
+  baselineSpine = atan2(sA.acceleration.y, sA.acceleration.z) * 57.29578;
   
   digitalWrite(BUZZER_PIN, HIGH); delay(600); digitalWrite(BUZZER_PIN, LOW);
 }
