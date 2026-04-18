@@ -8,7 +8,7 @@
 // ================================================================
 // 1. BLYNK CONFIGURATION (LIVE)
 // ================================================================
-#define BLYNK_TEMPLATE_ID "TMPL6cws0IBHu"
+#define BLYNK_TEMPLATE_ID "ENTER_TEMPLATE_ID"
 #define BLYNK_TEMPLATE_NAME "Smart Posture Corrector"
 #define BLYNK_AUTH_TOKEN "z78wYM7OS53a_aGUs-QrEOcB0_hh3_Cj"
 
