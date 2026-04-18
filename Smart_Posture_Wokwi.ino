@@ -36,7 +36,7 @@ char ssid[] = "Wokwi-GUEST";
 char pass[] = ""; 
 
 String apiKey = "ENTER_API_KEY"; 
-String serverName = "http://api.thingspeak.com/update"; 
+String serverName = "ENTER_THINKSPEAK_SERVERNAME"; 
 
 // ================================================================
 // 5. POSTURE LOGIC VARIABLES
