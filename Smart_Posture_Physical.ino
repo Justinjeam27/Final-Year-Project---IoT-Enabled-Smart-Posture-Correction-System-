@@ -9,9 +9,9 @@
 // ================================================================
 // 1. BLYNK CONFIGURATION
 // ================================================================
-#define BLYNK_TEMPLATE_ID "TMPL6cws0IBHu"
-#define BLYNK_TEMPLATE_NAME "Smart Posture Corrector"
-#define BLYNK_AUTH_TOKEN "z78wYM7OS53a_aGUs-QrEOcB0_hh3_Cj"
+#define BLYNK_TEMPLATE_ID "ENTER_TEMPLATE_ID"
+#define BLYNK_TEMPLATE_NAME "ENTER_TEMPLATE_NAME"
+#define BLYNK_AUTH_TOKEN "ENTER_AUTH_TOKEN"
 
 // ================================================================
 // 2. LIBRARIES
@@ -32,11 +32,11 @@ const uint8_t SPINE_ADDR = 0x69;
 // ================================================================
 // 4. PHYSICAL WI-FI CREDENTIALS
 // ================================================================
-char ssid[] = "Chungus-2"; 
-char pass[] = "ajjustin@12345"; 
+char ssid[] = "ENTER_WI-FI_SSID"; 
+char pass[] = "ENTER_WI-FI_PASSWORD"; 
 
-String apiKey = "PCGMNVIU22O69KF5"; 
-String serverName = "http://api.thingspeak.com/update";
+String apiKey = "ENTER_API_KEY"; 
+String serverName = "ENTER_THINKSPEAK_SERVERNAME"; 
 
 // ================================================================
 // 5. POSTURE LOGIC VARIABLES
