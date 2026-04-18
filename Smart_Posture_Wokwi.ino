@@ -35,7 +35,7 @@ Adafruit_MPU6050 mpuSpine; // Bridged I2C address: 0x69 (AD0 to VCC)
 char ssid[] = "Wokwi-GUEST";      
 char pass[] = ""; 
 
-String apiKey = "PCGMNVIU22O69KF5"; 
+String apiKey = "ENTER_API_KEY"; 
 String serverName = "http://api.thingspeak.com/update"; 
 
 // ================================================================
